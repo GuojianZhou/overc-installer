@@ -34,7 +34,7 @@ cat << EOF
 
      --config <script>: use the specified configuration script found in ~/.overc/
      --target-config <script>: use the specified configuration script found in ~/.overc/
-                               when running the target installer (live image creation)
+                               when running the target installer
      --force: force overwrite any output files or images
      --artifacts: directory where the binary inputs for image generation are found.
 		  The configuration script indicates what specific images will be used
@@ -144,6 +144,7 @@ if [ -n "$ARTIFACTS_DIR" ]; then
 	echo "[INFO]: Artifacts dir $ARTIFACTS_DIR does not exist"
     fi
 fi
+export ARTIFACTS_DIR
 
 # command line parameters can be:
 #   <target> (device, directory or file)
@@ -470,13 +471,19 @@ IFS=$OLDIFS
 	    done
 
 	    # create a configuration that can be read by the cubeit-installer
-	    echo "HDINSTALL_CONTAINERS=\"\\" > ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
-	    for c in ${HDINSTALL_CONTAINERS}; do
-		echo -n "${INSTALLER_TARGET_IMAGES_DIR}/containers/" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
-		echo -n `basename ${c}` >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
-		echo " \\" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
-	    done
-	    echo "\"" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+	    if [ -v TARGET_CONFIG_FILE -a -n "$TARGET_CONFIG_FILE" ]; then
+		cat $TARGET_CONFIG_FILE |
+			sed "s|\${ARTIFACTS_DIR}|${INSTALLER_TARGET_IMAGES_DIR}/containers|g" > \
+			${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+	    else
+		echo "HDINSTALL_CONTAINERS=\"\\" > ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+		for c in ${HDINSTALL_CONTAINERS}; do
+		    echo -n "${INSTALLER_TARGET_IMAGES_DIR}/containers/" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+		    echo -n `basename ${c}` >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+		    echo " \\" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+		done
+		echo "\"" >> ${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
+	    fi
 	    echo "DISTRIBUTION=\"$DISTRIBUTION\"" >>${mnt_rootfs}${INSTALLER_TARGET_CONFIG_DIR}/config-installer.sh
 	fi
 
@@ -533,14 +540,14 @@ disable_automounter()
 		        debugmsg ${DEBUG_INFO} "[INFO]: Disable automounter during install with gsetting."
 			AUTOMOUNT_BACK=`${RUN_LOGNAME} gsettings get ${MEDIA_HANDLING} automount`
 			AUTOMOUNT_OPEN_BACK=`${RUN_LOGNAME} gsettings get ${MEDIA_HANDLING} automount-open`
-			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount "false"
-			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount-open "false"
+			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount "false" 2>/dev/null
+			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount-open "false" 2>/dev/null
 		elif [ ${HAVE_DCONF} -eq 0 ]; then
 		        debugmsg ${DEBUG_INFO} "[INFO]: Disable automounter during install with dconf."
 			AUTOMOUNT_BACK=`${RUN_LOGNAME} dconf read ${MEDIA_HANDLING_PATH}/automount`
 			AUTOMOUNT_OPEN_BACK=`${RUN_LOGNAME} dconf read ${MEDIA_HANDLING_PATH}/automount-open`
-			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount "false"
-			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount-open "false"
+			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount "false" 2>/dev/null
+			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount-open "false" 2>/dev/null
 		fi
 	fi
 }
@@ -550,12 +557,12 @@ restore_automounter()
 	if [ "${DESKTOP_SESSION}" = "gnome" ]; then
 		if [ ${HAVE_GSETTING} -eq 0 ]; then
 		        debugmsg ${DEBUG_INFO} "[INFO]: Restore previous automounter settings with gsetting."
-			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount "${AUTOMOUNT_BACK}"
-			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount-open "${AUTOMOUNT_OPEN_BACK}"
+			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount "${AUTOMOUNT_BACK}" 2>/dev/null
+			${RUN_LOGNAME} gsettings set ${MEDIA_HANDLING} automount-open "${AUTOMOUNT_OPEN_BACK}" 2>/dev/null
 		elif [ ${HAVE_DCONF} -eq 0 ]; then
 		        debugmsg ${DEBUG_INFO} "[INFO]: Restore previous automounter settings with gconf."
-			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount "${AUTOMOUNT_BACK}"
-			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount-open "${AUTOMOUNT_OPEN_BACK}"
+			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount "${AUTOMOUNT_BACK}" 2>/dev/null
+			${RUN_LOGNAME} dconf write ${MEDIA_HANDLING_PATH}/automount-open "${AUTOMOUNT_OPEN_BACK}" 2>/dev/null
 		fi
 	fi
 }

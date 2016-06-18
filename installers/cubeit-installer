@@ -19,6 +19,7 @@ CONTAINERSDIR="${BASEDIR}/../images/containers"
 PACKAGESDIR="${BASEDIR}/../packages"
 PUPPETDIR="${BASEDIR}/../files/puppet"
 SBINDIR="${BASEDIR}/../sbin"
+export SBINDIR
 if [ -z "${CONFIG_DIRS}" ] ; then
     CONFIG_DIRS="${BASEDIR}/../config $HOME/.overc/"
 fi
@@ -177,6 +178,10 @@ fi
 
 if ! [ -n "$DISTRIBUTION" ]; then
     DISTRIBUTION="OverC"
+fi
+
+if [ -v CONTAINER_PREFIX -a -n "$CONTAINER_PREFIX" ] ; then
+    export CNAME_PREFIX="--prefix $CONTAINER_PREFIX"
 fi
 
 get_container_name_by_prop()
@@ -393,7 +398,7 @@ mount /dev/${fs_dev}1 ./boot
 
 img=`ls boot/*Image-* 2> /dev/null`
 if [ -n "$img" ] ; then
-	debugmsg ${DEBUG_INFO} "[INFO]: installing initramfs"
+	debugmsg ${DEBUG_INFO} "[INFO]: installing initramfs ($INSTALL_INITRAMFS)"
 	kernel=`basename boot/*Image-*`
 	kernel_version=`echo $kernel | sed 's/^[^0-9]*-//g'`
 	initrd="initrd-${kernel_version}.gz"
@@ -590,7 +595,7 @@ if [ -n "${HDINSTALL_CONTAINERS}" ]; then
     # determine if we need tell overc-cctl to use bridged networking or not.
     overc_cctl_bridged_net_opt=" -b "
     for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
-	cname=`${SBINDIR}/cubename $c`
+	cname=`${SBINDIR}/cubename $CNAME_PREFIX $c`
 	net_offset=`get_prop_value_by_container $cname "net"`
 	if [ -n "$net_offset" ] && [ $net_offset -eq 1 ]; then
 	    overc_cctl_bridged_net_opt=" "
@@ -598,12 +603,37 @@ if [ -n "${HDINSTALL_CONTAINERS}" ]; then
 	fi
     done
 
+
+    CNRECORD=`mktemp /tmp/hdcontainerXXXXX`
+    export CNRECORD
+
+    for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
+	cname=`${SBINDIR}/cubename $CNAME_PREFIX $c`
+
+	echo -n "Extracting rootfs $cname, with src $c....."
+
+	# untar it into temp, save it to record
+	tmpcontainer=`mktemp -d /tmp/hdcnt_dirXXXXX`
+	mergepatch=`get_prop_value_by_container $cname "mergepath"`
+
+	echo "$cname:$tmpcontainer:$mergepatch" >> ${CNRECORD}
+	mkdir -p $tmpcontainer/rootfs
+	tar --numeric-owner -xjf $c -C $tmpcontainer/rootfs
+
+	if [ $? != 0 ]; then
+		echo "failed!"
+		echo "Error: rootfs file extraction failed"
+		exit 1
+	fi
+	echo "succeeded"
+    done;
+
     for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
 	debugmsg ${DEBUG_INFO} "[INFO]: installing $c"
 
 	# containers names are "prefix-<container name>-<... suffixes >
 	container_src=`basename $c`
-	cname=`${SBINDIR}/cubename $c`
+	cname=`${SBINDIR}/cubename $CNAME_PREFIX $c`
 	cp $c ${TMPMNT}/tmp/
 	cp ${SBINDIR}/overc-cctl ${TMPMNT}/tmp/
 	
@@ -682,10 +712,18 @@ if [ -n "${HDINSTALL_CONTAINERS}" ]; then
 	rm ${TMPMNT}/tmp/$(basename $c)
     done
 
+    #cleanup temp files
+    for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
+        cname=`${SBINDIR}/cubename $CNAME_PREFIX $c`
+        temp_dir=`cat ${CNRECORD}|awk -F ":" '{if ( $1=="'${cname}'" )print $2}'`
+        rm $temp_dir -r
+    done
+    rm ${CNRECORD}
+
     # install and modify services
     for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
 	container_src=`basename $c`
-	cname=`${SBINDIR}/cubename $c`
+	cname=`${SBINDIR}/cubename $CNAME_PREFIX $c`
 
 	# if there was a foreground container defined (attribte 'active' on a vty), then we
 	# install a chvt service to make sure it is in the foreground after boot. Note, this
@@ -852,7 +890,7 @@ fi
 if [ $btrfs -eq 0 ]; then
 	:
 else
-	debugmsg ${DEBUG_INFO} "[INFO]: Create snapshot of rootfs for recovery."
+	debugmsg ${DEBUG_INFO} "[INFO]: Creating a snapshot of rootfs for recovery."
 	#mount the root subvolume
 	mount -o subvolid=5 /dev/${fs_dev}3 ${TMPMNT}
 	if [ -e "${TMPMNT}/rootfs" ]; then
