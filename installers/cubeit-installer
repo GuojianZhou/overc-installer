@@ -342,7 +342,9 @@ debugmsg ${DEBUG_INFO} "[INFO]: creating partitions using (${FDISK_PARTITION_LAY
 debugmsg ${DEBUG_INFO} "          1) boot"
 debugmsg ${DEBUG_INFO} "          2) swap"
 debugmsg ${DEBUG_INFO} "          3) root"
-debugmsg ${DEBUG_INFO} "          4) container (lxc)"
+if [ -n "${HDINSTALL_CONTAINERS}" ]; then
+	debugmsg ${DEBUG_INFO} "          4) container (lxc)"
+fi
 # We partition the raw device as passed to the script. This is
 # nuke and pave .. so be careful!
 if [ -f ${FDISK_PARTITION_LAYOUT} ]; then
@@ -392,14 +394,18 @@ fi
 if [ $btrfs -eq 0 ]; then
     debugmsg ${DEBUG_INFO} "[INFO]: creating / (ext4)"
     mkfs.ext4 -v -L $ROOTLABEL /dev/${rootfs_dev}
-    mkfs.ext4 -v -L $LXCLABEL /dev/${lxc_fs_dev}
+    if [ -n "${HDINSTALL_CONTAINERS}" ]; then
+    	mkfs.ext4 -v -L $LXCLABEL /dev/${lxc_fs_dev}
+    fi
 else
     debugmsg ${DEBUG_INFO} "[INFO]: creating / (btrfs)"
     set +e
     has_f=`mkfs.btrfs 2>&1 |grep -q '^.*\-f' && echo -f`
     set -e
     mkfs.btrfs $has_f -L $ROOTLABEL /dev/${rootfs_dev}
-    mkfs.btrfs $has_f -L $LXCLABEL /dev/${lxc_fs_dev}
+    if [ -n "${HDINSTALL_CONTAINERS}" ]; then
+	mkfs.btrfs $has_f -L $LXCLABEL /dev/${lxc_fs_dev}
+    fi
 fi
 set +e
 
@@ -614,7 +620,9 @@ sed -i '/^usbdevfs/d' ${TMPMNT}/etc/fstab
 
 echo "LABEL=$SWAPLABEL none swap sw 0 0" >> ${TMPMNT}/etc/fstab
 echo "LABEL=$BOOTLABEL /boot auto defaults 0 0" >> ${TMPMNT}/etc/fstab
-echo "LABEL=$LXCLABEL /var/lib/lxc auto defaults 0 0" >> ${TMPMNT}/etc/fstab
+if [ -n "${HDINSTALL_CONTAINERS}" ]; then
+	echo "LABEL=$LXCLABEL /var/lib/lxc auto defaults 0 0" >> ${TMPMNT}/etc/fstab
+fi
 
 if [ -e "$INSTALL_SMARTCONFIG" ]; then
 	cp $INSTALL_SMARTCONFIG ${TMPMNT}/var/lib/smart/config
