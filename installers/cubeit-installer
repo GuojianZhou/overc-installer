@@ -631,13 +631,17 @@ elif [ -e /${IMAGESDIR}/config.smart ]; then
 fi
 
 #make essential system use vty 1 to login and disable the autoVTs of systemd
-sed -i "s/#NAutoVTs=.*$/NAutoVTs=0/g" ${TMPMNT}/etc/systemd/logind.conf
-sed -i "s/#ReserveVT=.*$/ReserveVT=0/g" ${TMPMNT}/etc/systemd/logind.conf
-gettys=$( ls ${TMPMNT}/etc/systemd/system/getty.target.wants/getty* )
-for k in ${gettys}; do
-	ln -s -f /dev/null ${k}
-done
-ln -sf /lib/systemd/system/getty@.service ${TMPMNT}/etc/systemd/system/getty.target.wants/getty@tty1.service
+if [ -n "${HDINSTALL_CONTAINERS}" ]; then
+	sed -i "s/#NAutoVTs=.*$/NAutoVTs=0/g" ${TMPMNT}/etc/systemd/logind.conf
+	sed -i "s/#ReserveVT=.*$/ReserveVT=0/g" ${TMPMNT}/etc/systemd/logind.conf
+	gettys=$( ls ${TMPMNT}/etc/systemd/system/getty.target.wants/getty* )
+	for k in ${gettys}; do
+		ln -s -f /dev/null ${k}
+	done
+	ln -sf /lib/systemd/system/getty@.service ${TMPMNT}/etc/systemd/system/getty.target.wants/getty@tty1.service
+elif [ -e ${TMPMNT}/etc/puppet/manifests/site.pp ]; then
+	sed -i "s/\(^configure_network_prime.*$\)/#\1/g" ${TMPMNT}/etc/puppet/manifests/site.pp
+fi
 
 # Disable all not needed services in essentail
 if [ -n "${SERVICE_DISABLE_ESSENTIAL}" ]; then
