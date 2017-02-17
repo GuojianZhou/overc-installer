@@ -475,6 +475,16 @@ fi
 debugmsg ${DEBUG_INFO} "[INFO]: installing rootfs ($rootfs)"
 tar --numeric-owner -xpf $rootfs
 
+# sanity check the private key is available for IMA signing
+if [ $do_ima_sign -eq 1 ]; then
+    if [ ! -f etc/keys/privkey_evm.pem ]; then
+        if [ -z "${IMA_PRIVKEY}" -o ! -f "${IMA_PRIVKEY}" ]; then
+            debugmsg ${DEBUG_WARN} "[WARNING]: IMA signined disabled."
+            do_ima_sign=0
+        fi
+    fi
+fi
+
 mount /dev/${fs_dev}1 mnt
 
 imgs=`ls boot/*Image-* 2>/dev/null`
@@ -636,7 +646,7 @@ menuentry "$DISTRIBUTION recovery" {
 
 EOF
 
-    if [ $do_ima_sign -eq 1 ]; then
+    if [ $do_ima_sign -eq 1 -a $do_encryption -eq 0 ]; then
         sed -i 's/^\s*linux .*/& ima_policy=tcb/' ${TMPMNT}/mnt/grub/grub.cfg
     fi
 
@@ -657,20 +667,28 @@ EOF
 	else
 	    cat <<EOF >mnt/EFI/BOOT/grub.cfg
 set default="0"
-set timeout=5
+set timeout=3
 set color_normal='light-gray/black'
 set color_highlight='light-green/blue'
 
+insmod efivar
+get_efivar -f uint8 -s SECURE_OFF SetupMode
+
+if [ "\${SECURE_OFF}" = "1" ]; then
+    set timeout=0
+
+    menuentry "Automatic Certificate Provision" {
+        chainloader \${prefix}/LockDown.efi
+    }
+fi
+
 menuentry "$DISTRIBUTION" {
-       chainloader /bzImage root=LABEL=OVERCROOTFS ro rootwait initrd=/initrd
+    set fallback="$DISTRIBUTION recovery"
+    chainloader /bzImage root=LABEL=OVERCROOTFS ro rootwait initrd=/initrd
 }
 
 menuentry "$DISTRIBUTION recovery" {
-       chainloader /bzImage_bakup root=LABEL=OVERCROOTFS rootflags=subvol=rootfs_bakup ro rootwait initrd=/initrd
-}
-
-menuentry 'Automatic Certificate Provision' {
-       chainloader /EFI/BOOT/LockDown.efi
+    chainloader /bzImage_bakup root=LABEL=OVERCROOTFS rootflags=subvol=rootfs_bakup ro rootwait initrd=/initrd
 }
 EOF
 	fi
@@ -678,9 +696,9 @@ EOF
 	echo `basename mnt/EFI/BOOT/boot*.efi` >mnt/startup.nsh
 	chmod +x mnt/startup.nsh
 
-        if [ $do_ima_sign -eq 1 ]; then
-            sed -i 's/^\s*chainloader .*/& integrity_audit=1 ima_policy=tcb/' mnt/EFI/BOOT/grub.cfg
-            sed -i 's/^\s*linux .*/& integrity_audit=1 ima_policy=tcb/' mnt/EFI/BOOT/grub.cfg
+        if [ $do_ima_sign -eq 1 -a $do_encryption -eq 0 ]; then
+            sed -i 's/^\s*chainloader .*/& ima_policy=tcb/' mnt/EFI/BOOT/grub.cfg
+            sed -i 's/^\s*linux .*/& ima_policy=tcb/' mnt/EFI/BOOT/grub.cfg
         fi
     else
 	install -m 0755 ${SBINDIR}/startup.nsh mnt/
