@@ -507,6 +507,10 @@ elif [ -e boot/bzImage-* ]; then
         fi
         cp boot/bzImage-* mnt/bzImage
         cp boot/bzImage-* mnt/bzImage_bakup
+elif [ -e boot/fitImage-* ]; then
+	cp boot/fitImage-* mnt/fitImage
+	#create a backup kernel for recovery boot
+	cp boot/fitImage-* mnt/fitImage_bakup
 fi
  
 img=`ls boot/*Image-* 2> /dev/null`
