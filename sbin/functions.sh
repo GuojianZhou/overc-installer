@@ -658,6 +658,8 @@ install_grub()
 	fi
 	chmod +x ${mountpoint}/startup.nsh
 
+	selsign "${mountpoint}/EFI/BOOT/${GRUB_CFG_NAME}"
+
 	return 0
 }
 
@@ -667,6 +669,7 @@ install_kernel()
 	local boot_part="$2"
 	local initramfs="$3"
 	local initramfs_dest="$4"
+	local initramfs_repacked="$5"
 
 	debugmsg ${DEBUG_INFO} "Installing new kernel image to boot partition"
 
@@ -684,12 +687,34 @@ install_kernel()
 		return 1
 	fi
 
-	if [ -n "${initramfs}" ]; then
+	if [ -f "${kernel_src}.p7b" ]; then
+	    cp "${kernel_src}.p7b" "${boot_part}/images"
+	    if [ $? -ne 0 ]
+	    then
+		debugmsg ${DEBUG_CRIT} "ERROR: Failed to copy the signature of kernel image to boot partition"
+		return 1
+	    fi
+	fi
+
+	if [ -n ${initramfs} ]; then
 		cp ${initramfs} ${boot_part}/images/${initramfs_dest}
 		if [ $? -ne 0 ]
 		then
 			debugmsg ${DEBUG_CRIT} "ERROR: Failed to copy initramfs image to boot partition"
 			return 1
+		fi
+
+		if [ -f "${initramfs}.p7b" ]; then
+		    if [ -n "${initramfs_repacked}" ]; then
+			selsign "${boot_part}/images/${initramfs_dest}"
+		    else
+			cp "${initramfs}.p7b" "${boot_part}/images/${initramfs_dest}.p7b"
+			if [ $? -ne 0 ]
+			then
+			    debugmsg ${DEBUG_CRIT} "ERROR: Failed to copy the signature of initramfs image to boot partition"
+			    return 1
+			fi
+		    fi
 		fi
 	fi
 
