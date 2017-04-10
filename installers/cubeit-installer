@@ -532,10 +532,11 @@ if [ -n "$img" -a $bundled_kernel -eq 0 ] ; then
 	# create both a initrd-<version> and initrd
 	if [ -e "$INSTALL_INITRAMFS" ]; then
 		cp "$INSTALL_INITRAMFS" "mnt/${initrd}" &&
-		    [ -f "$INSTALL_INITRAMFS.p7b" ] && {
+		    [ -f "$INSTALL_INITRAMFS.p7b" ] &&
 			cp -f "$INSTALL_INITRAMFS.p7b" "mnt/${initrd}.p7b"
+		cp "$INSTALL_INITRAMFS" "mnt/initrd" &&
+		    [ -f "$INSTALL_INITRAMFS.p7b" ] &&
 			cp -f "$INSTALL_INITRAMFS.p7b" mnt/initrd.p7b
-		    }
 	else
 		#Generally in deploy/image dir, there will be several initramfs files
 		#with different name, but they are the same file, so here just copy one
