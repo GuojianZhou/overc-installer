@@ -649,6 +649,7 @@ install_grub()
 		mkdir -p ${mountpoint}/EFI/BOOT/
 		cp $INSTALL_EFIBOOT ${mountpoint}/EFI/BOOT/
 		cp ${mountpoint}/boot/grub/${GRUB_CFG_NAME} ${mountpoint}/EFI/BOOT/
+		selsign "${mountpoint}/EFI/BOOT/${GRUB_CFG_NAME}"
 		echo `basename $INSTALL_EFIBOOT` >${mountpoint}/startup.nsh
 	else
 		cp ${BASEDIR}/startup.nsh ${mountpoint}/
@@ -657,8 +658,6 @@ install_grub()
 		sed -i "s/%BZIMAGE%/\\\images\\\bzImage/" ${mountpoint}/startup.nsh
 	fi
 	chmod +x ${mountpoint}/startup.nsh
-
-	selsign "${mountpoint}/EFI/BOOT/${GRUB_CFG_NAME}"
 
 	return 0
 }
