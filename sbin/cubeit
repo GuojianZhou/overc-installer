@@ -164,95 +164,86 @@ if [ -n "$ARTIFACTS_DIR" ]; then
 fi
 export ARTIFACTS_DIR
 
-# determine the location of key store
-if [ -z "$KEYS_DIR" -o ! -d "$KEYS_DIR" ]; then
-    SAMPLE_KEYS_DIR="$ARTIFACTS_DIR/sample-keys"
-    USER_KEYS_DIR="$ARTIFACTS_DIR/user-keys"
+if [ -z "${KEYS_DIR}" ] || [ ! -d "${KEYS_DIR}" ]; then
+    SAMPLE_KEYS_DIR="${ARTIFACTS_DIR}/sample-keys"
+    USER_KEYS_DIR="${ARTIFACTS_DIR}/user-keys"
 
-    if [ -d "$USER_KEYS_DIR" ]; then
-        KEYS_DIR="$USER_KEYS_DIR"
+    if [ -d "${USER_KEYS_DIR}" ]; then
+        KEYS_DIR="${USER_KEYS_DIR}"
     else
-        KEYS_DIR="$SAMPLE_KEYS_DIR"
+        KEYS_DIR="${SAMPLE_KEYS_DIR}"
     fi
 fi
 
 # check if the filesystem can support xattr.
 check_fs_for_ima()
 {
-    local tmpfile="`mktemp test_XXXX`"
-    local res=`setfattr -x security.ima "$tmpfile" 2>&1 | grep -q 'Operation not supported$'`
+    local tmpfile="$(mktemp test_XXXX)"
+    local res="$(setfattr -x security.ima "${tmpfile}" 2>&1 | grep -q 'Operation not supported$')"
 
-    rm -f "$tmpfile"
+    rm -f "${tmpfile}"
 
-    return ! $res
+    if [ x"${res}" = x"" ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-if [ $DO_IMA_SIGN -eq 1 ]; then
-    if [ ! -s "$KEYS_DIR/ima_keys/ima_privkey.pem" ]; then
-        debugmsg ${DEBUG_CRIT} "[ERROR] Unable to run IMA signing due to the invalid signing key"
+if [ ${DO_IMA_SIGN} -eq 1 ]; then
+    if [ ! -s "${KEYS_DIR}/ima_keys/ima_privkey.pem" ]; then
+        debugmsg ${DEBUG_CRIT} "[ERROR] Unable to run IMA signing due to specifying a nonexistent or empty signing key file"
         exit 1
-    elif ! check_fs_for_ima; then
+    fi
+
+    if ! check_fs_for_ima; then
         debugmsg ${DEBUG_CRIT} "[ERROR]: Current file system does not support to set xattr"
         exit 1
     fi
 fi
 
-selsign()
-{
-    $LIBSIGN_DIR/bin/selsign.sh -k "$KEYS_DIR/mok_sb_keys/vendor_cert.key" \
-        -c "$KEYS_DIR/mok_sb_keys/vendor_cert.pem" "$1" && {
-            debugmsg ${DEBUG_INFO} "[INFO] Succeeded to sign $1"
-        } || {
-            debugmsg ${DEBUG_INFO} "[ERROR] Failed to sign $1"
-            exit 1
-        }
-}
-
 ima_sign()
 {
     evmctl ima_sign --hashalgo sha256 --rsa \
-        --key "$KEYS_DIR/ima_keys/ima_privkey.pem" \
-        -r -t f "$1" && {
-        return 0
-    } || {
-        debugmsg ${DEBUG_INFO} "[ERROR]: IMA signing occurs with error for $1."
-        exit 1
-    } &
+        --key "${KEYS_DIR}/ima_keys/ima_privkey.pem" \
+        -r -t f "$1" &
+
     pidspinner "$!" "1"
 }
 
 repack_image_for_ima()
 {
     local tarball="$1"
-    local tarball_dst=$2
-    local repack_dir=`mktemp -d repack_tarball.XXXXXX`
-    local repack_image="`basename ${tarball}`"
+    local tarball_dst="$2"
+    local repack_dir="$(mktemp -d repack_tarball.XXXXXX)"
+    local repack_image="$(basename ${tarball})"
 
     debugmsg ${DEBUG_INFO} "[INFO]: Preparing to repack image ${repack_image} for IMA signing ..."
 
     repack_dir="`pwd`/${repack_dir}"
 
     extract_tarball "${tarball}" "${repack_dir}"
-    [ $? -ne 0 ] && {
+    if [ $? -ne 0 ]; then
         rm -rf "${repack_dir}"
         return 1
-    }
+    fi
 
-    debugmsg ${DEBUG_INFO} "[INFO]: The image ${repack_image} extracted"
+    debugmsg ${DEBUG_INFO} "[INFO]: Finished extracting image ${repack_image}"
 
-    ima_sign "$repack_dir"
-    [ $? -ne 0 ] && {
+    ima_sign "${repack_dir}"
+    if [ $? -ne 0 ]; then
         rm -rf "${repack_dir}"
+        debugmsg ${DEBUG_INFO} "[ERROR]: IMA signing generated an error"
         return 1
-    }
+    fi
 
     debugmsg ${DEBUG_INFO} "[INFO]: IMA signing complete for ${repack_image}"
 
     pack_tarball "${repack_dir}" "`pwd`/${repack_image}"
-    [ $? -ne 0 ] && {
+    if [ $? -ne 0 ]; then
         rm -rf "${repack_dir}"
         return 1
-    }
+    fi
 
     rm -rf "${repack_dir}"
 
@@ -261,6 +252,69 @@ repack_image_for_ima()
     debugmsg ${DEBUG_INFO} "[INFO]: ${tarball} is repacked as ${repack_image}"
 
     return 0
+}
+
+ima_sign()
+{
+    evmctl ima_sign --hashalgo sha256 --rsa \
+        --key "${KEYS_DIR}/ima_keys/ima_privkey.pem" \
+        -r -t f "$1" &
+
+    pidspinner "$!" "1"
+}
+
+repack_image_for_ima()
+{
+    local tarball="$1"
+    local tarball_dst="$2"
+    local repack_dir="$(mktemp -d repack_tarball.XXXXXX)"
+    local repack_image="$(basename ${tarball})"
+
+    debugmsg ${DEBUG_INFO} "[INFO]: Preparing to repack image ${repack_image} for IMA signing ..."
+
+    repack_dir="`pwd`/${repack_dir}"
+
+    extract_tarball "${tarball}" "${repack_dir}"
+    if [ $? -ne 0 ]; then
+        rm -rf "${repack_dir}"
+        return 1
+    fi
+
+    debugmsg ${DEBUG_INFO} "[INFO]: Finished extracting image ${repack_image}"
+
+    ima_sign "${repack_dir}"
+    if [ $? -ne 0 ]; then
+        rm -rf "${repack_dir}"
+        debugmsg ${DEBUG_INFO} "[ERROR]: IMA signing generated an error"
+        return 1
+    fi
+
+    debugmsg ${DEBUG_INFO} "[INFO]: IMA signing complete for ${repack_image}"
+
+    pack_tarball "${repack_dir}" "`pwd`/${repack_image}"
+    if [ $? -ne 0 ]; then
+        rm -rf "${repack_dir}"
+        return 1
+    fi
+
+    rm -rf "${repack_dir}"
+
+    eval "${tarball_dst}=${repack_image}"
+
+    debugmsg ${DEBUG_INFO} "[INFO]: ${tarball} is repacked as ${repack_image}"
+
+    return 0
+}
+
+selsign()
+{
+    "${LIBSIGN_DIR}/bin/selsign.sh" -k "${KEYS_DIR}/mok_sb_keys/vendor_cert.key" \
+        -c "${KEYS_DIR}/mok_sb_keys/vendor_cert.pem" "$1" && {
+            debugmsg ${DEBUG_INFO} "[INFO] Succeeded to sign $1"
+        } || {
+            debugmsg ${DEBUG_INFO} "[ERROR] Failed to sign $1"
+            exit 1
+        }
 }
 
 # command line parameters can be:
@@ -544,12 +598,12 @@ copy_installer_data()
 	if [ -n "${HDINSTALL_ROOTFS}" ]; then
 	    ## Copy the Linux rootfs tarball(s) to USB drive
             for i in ${HDINSTALL_ROOTFS}; do
-		if [ $DO_IMA_SIGN -eq 0 ]; then
+		if [ ${DO_IMA_SIGN} -eq 0 ]; then
 		    img="${i}"
 		else
 		    repack_image_for_ima "${i}" img
 		    if [ $? -ne 0 ]; then
-			debugmsg ${DEBUG_CRIT} "ERROR: Failed to repack rootfs image $i for IMA signing"
+			debugmsg ${DEBUG_CRIT} "ERROR: Failed to repack rootfs image ${i} for IMA signing"
 			return 1
 		    fi
 		fi
@@ -579,12 +633,12 @@ copy_installer_data()
 
 	    # drop any properties and copy the containers to the installer
 	    for c in `strip_properties ${HDINSTALL_CONTAINERS}`; do
-		if [ $DO_IMA_SIGN -eq 0 ]; then
+		if [ ${DO_IMA_SIGN} -eq 0 ]; then
 		    img="${c}"
 		else
 		    repack_image_for_ima "${c}" img
 		    if [ $? -ne 0 ]; then
-			debugmsg ${DEBUG_CRIT} "ERROR: Failed to repack container image $c for IMA signing"
+			debugmsg ${DEBUG_CRIT} "ERROR: Failed to repack container image ${c} for IMA signing"
 			return 1
 		    fi
 		fi
