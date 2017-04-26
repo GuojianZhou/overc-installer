@@ -280,7 +280,7 @@ EOF
 		echo "lxc.mount.entry = devpts ${lxcbase}/${cn}/rootfs/dev/pts devpts gid=5,mode=620 0 0" >>${pathtocontainer}/config
 		echo "lxc.mount.entry = proc ${lxcbase}/${cn}/rootfs/proc    proc defaults 0 0" >>${pathtocontainer}/config
 		echo "lxc.mount.entry = sysfs ${lxcbase}/${cn}/rootfs/sys     sysfs defaults 0 0" >>${pathtocontainer}/config
-		echo "lxc.hook.autodev = ${lxcbase}/${cn}/autodev" >>${pathtocontainer}/config
+		echo "lxc.hook.autodev = /bin/bash ${lxcbase}/${cn}/autodev" >>${pathtocontainer}/config
 	fi
 
 	if [ -f "etc/system-id" ] || [ -f "/etc/system-id" ]; then
