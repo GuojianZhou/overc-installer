@@ -969,7 +969,9 @@ extract_tarball()
 	local destination="$2"
 	local extra_opts=""
 
-	[ $DO_IMA_SIGN -eq 1 ] && extra_opts="--xattrs --xattrs-include=security\\.ima"
+	if [ ${DO_IMA_SIGN} -eq 1 ]; then
+		extra_opts="--xattrs --xattrs-include=security\\.ima"
+	fi
 
 	tar ${extra_opts} -jxf "${tarball_src}" -C "${destination}" &
 	pidspinner "$!" "1"
@@ -989,7 +991,9 @@ pack_tarball()
 	local tarball="$2"
 	local extra_opts=""
 
-	[ $DO_IMA_SIGN -eq 1 ] && extra_opts="--xattrs --xattrs-include=security\\.ima"
+	if [ ${DO_IMA_SIGN} -eq 1 ]; then
+		extra_opts="--xattrs --xattrs-include=security\\.ima"
+	fi
 
 	(
 		cd "${dir}"
