@@ -828,7 +828,7 @@ function stop_container {
 		return
 	fi
 	echo -n "Stopping container ${cn} .... "
-	lxc-stop -n ${cn}
+	lxc-stop -n ${cn} -k
 	echo "done"
 }
 
