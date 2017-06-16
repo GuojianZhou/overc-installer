@@ -332,6 +332,11 @@ function create_lxc_fstab {
 	    fi
 	fi
 
+	# If lvm2 is installed an active a container should not run 10-dm.rules
+	if [ -f ${pathtocontainer}/rootfs/lib/udev/rules.d/10-dm.rules ] ; then
+	    echo "/dev/null	${lxcbase}/${cn}/rootfs/lib/udev/rules.d/10-dm.rules	none ro,bind"  >> ${pathtocontainer}/fstab
+	fi
+
 	lxcbase=$temp_lxcbase
 	bindmntbase=$temp_bindmntbase
 }
