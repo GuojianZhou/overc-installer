@@ -254,58 +254,6 @@ repack_image_for_ima()
     return 0
 }
 
-ima_sign()
-{
-    evmctl ima_sign --hashalgo sha256 --rsa \
-        --key "${KEYS_DIR}/ima_keys/ima_privkey.pem" \
-        -r -t f "$1" &
-
-    pidspinner "$!" "1"
-}
-
-repack_image_for_ima()
-{
-    local tarball="$1"
-    local tarball_dst="$2"
-    local repack_dir="$(mktemp -d repack_tarball.XXXXXX)"
-    local repack_image="$(basename ${tarball})"
-
-    debugmsg ${DEBUG_INFO} "[INFO]: Preparing to repack image ${repack_image} for IMA signing ..."
-
-    repack_dir="`pwd`/${repack_dir}"
-
-    extract_tarball "${tarball}" "${repack_dir}"
-    if [ $? -ne 0 ]; then
-        rm -rf "${repack_dir}"
-        return 1
-    fi
-
-    debugmsg ${DEBUG_INFO} "[INFO]: Finished extracting image ${repack_image}"
-
-    ima_sign "${repack_dir}"
-    if [ $? -ne 0 ]; then
-        rm -rf "${repack_dir}"
-        debugmsg ${DEBUG_INFO} "[ERROR]: IMA signing generated an error"
-        return 1
-    fi
-
-    debugmsg ${DEBUG_INFO} "[INFO]: IMA signing complete for ${repack_image}"
-
-    pack_tarball "${repack_dir}" "`pwd`/${repack_image}"
-    if [ $? -ne 0 ]; then
-        rm -rf "${repack_dir}"
-        return 1
-    fi
-
-    rm -rf "${repack_dir}"
-
-    eval "${tarball_dst}=${repack_image}"
-
-    debugmsg ${DEBUG_INFO} "[INFO]: ${tarball} is repacked as ${repack_image}"
-
-    return 0
-}
-
 selsign()
 {
     "${LIBSIGN_DIR}/bin/selsign.sh" -k "${KEYS_DIR}/mok_sb_keys/vendor_cert.key" \
